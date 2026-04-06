@@ -11,11 +11,11 @@ header("Access-Control-Max-Age: 3600");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 
 // Database Configuration
-$host = "dpg-d798cv9r0fns73eccpe0-a.oregon-postgres.render.com";
+$host = "dpg-d79fh7s50q8c73fibff0-a.oregon-postgres.render.com";
 $port = "5432";
-$dbname = "smartfarm_azmq";
+$dbname = "smartfarm_s09w";
 $user = "smartfarm";
-$password = "ajvsGgtxm2LptR3vS5icL2pyLfy7GX0H";
+$password = "IGWWG5aGIuwSOqcdFzIVp1qx9Juoveki";
 
 try {
     $dsn = "pgsql:host=$host;port=$port;dbname=$dbname;user=$user;password=$password";

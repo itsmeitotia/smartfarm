@@ -34,7 +34,7 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> login(String email, String password) async {
     final response = await http.post(
-      Uri.parse('https://your-api.render.com/api/auth/login'),
+      Uri.parse('https://smartfarm-p15v.onrender.com/api/auth/login'),
       body: json.encode({'email': email, 'password': password}),
       headers: {'Content-Type': 'application/json'},
     );

@@ -16,7 +16,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "smartfarm_secret_key_2026";
 
 // Database Pool
 const pool = new Pool({
-  connectionString: 'postgresql://smartfarm:ajvsGgtxm2LptR3vS5icL2pyLfy7GX0H@dpg-d798cv9r0fns73eccpe0-a.oregon-postgres.render.com/smartfarm_azmq',
+  connectionString: 'postgresql://smartfarm:IGWWG5aGIuwSOqcdFzIVp1qx9Juoveki@dpg-d79fh7s50q8c73fibff0-a.virginia-postgres.render.com/smartfarm_s09w',
   ssl: {
     rejectUnauthorized: false
   }
