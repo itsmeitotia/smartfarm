@@ -325,11 +325,14 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [prices, setPrices] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [crops, setCrops] = useState<any[]>([]);
 
   useEffect(() => {
     axios.get('/api/market-prices').then(res => setPrices(res.data.slice(0, 4)));
     axios.get('/api/alerts').then(res => setAlerts(res.data.slice(0, 3)));
-  }, []);
+    const cropsUrl = user?.role === 'farmer' ? `/api/crops?farmer_id=${user.id}` : '/api/crops';
+    axios.get(cropsUrl).then(res => setCrops(res.data));
+  }, [user]);
 
   return (
     <div className="pb-24">
@@ -363,17 +366,51 @@ const Dashboard = () => {
 
         {/* Farmer Actions */}
         {user?.role === 'farmer' && (
-          <section>
+          <section className="space-y-6">
             <Card className="p-6 bg-black text-white border-none relative overflow-hidden">
               <div className="relative z-10">
                 <h3 className="text-xl font-bold mb-2">Sell Your Produce</h3>
                 <p className="text-gray-400 text-sm mb-4">List your crops on the marketplace and reach thousands of buyers.</p>
-                <Button onClick={() => navigate('/admin?tab=crops')} className="bg-[#39FF14] text-black border-none font-bold">
+                <Button onClick={() => navigate('/list-crop')} className="bg-[#39FF14] text-black border-none font-bold">
                   List New Crop
                 </Button>
               </div>
               <Sprout className="absolute -right-4 -bottom-4 text-[#39FF14]/10" size={120} />
             </Card>
+
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold">My Listings</h3>
+                <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Status Tracking</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {crops.filter(c => c.farmer_id === user.id).map((c, i) => (
+                  <Card key={i} className="p-4 flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+                      <img src={c.image_url || `https://picsum.photos/seed/${c.name}/200/200`} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-gray-900 truncate">{c.name}</h4>
+                      <p className="text-xs text-gray-500">KES {c.price} / {c.unit}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={cn(
+                          "text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter",
+                          c.status === 'approved' ? "bg-green-100 text-green-600" : 
+                          c.status === 'rejected' ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-600"
+                        )}>
+                          {c.status}
+                        </span>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+                {crops.filter(c => c.farmer_id === user.id).length === 0 && (
+                  <div className="col-span-full p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                    <p className="text-sm text-gray-400">You haven't listed any crops yet.</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
         )}
 
@@ -635,24 +672,99 @@ const CropDetection = () => {
               </div>
             </div>
           ) : (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <Card className="p-6 border-2 border-[#39FF14]">
-                <div className="flex items-center gap-2 text-[#39FF14] mb-4">
-                  <CheckCircle2 size={24} />
-                  <h3 className="font-bold text-lg">Analysis Result</h3>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Diagnosis</p>
-                    <p className="text-gray-900 font-medium">{result.diagnosis}</p>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              <Card className="p-0 overflow-hidden border-2 border-[#39FF14] shadow-xl">
+                <div className="bg-black p-6 text-white flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#39FF14] rounded-xl flex items-center justify-center text-black">
+                      <Bug size={24} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg">AI Health Report</h3>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-widest">Generated by SmartFarm AI</p>
+                    </div>
                   </div>
-                  <div className="p-4 bg-gray-50 rounded-xl">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Recommended Solution</p>
-                    <p className="text-gray-700">{result.solution}</p>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400">{new Date().toLocaleDateString()}</p>
+                    <p className="text-xs text-[#39FF14] font-bold">Confidence: High</p>
                   </div>
                 </div>
-                <Button variant="outline" className="w-full mt-6" onClick={() => { setImage(null); setResult(null); }}>Start New Scan</Button>
+
+                <div className="p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Diagnosis</p>
+                        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl">
+                          <p className="text-red-700 font-bold text-lg">{result.diagnosis}</p>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Recommended Action</p>
+                        <div className="p-4 bg-[#39FF14]/5 border border-[#39FF14]/20 rounded-2xl">
+                          <p className="text-gray-800 leading-relaxed">{result.solution}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {symptoms && (
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Reported Symptoms</p>
+                          <p className="text-sm text-gray-600 italic">"{symptoms}"</p>
+                        </div>
+                      )}
+                      {environment && (
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Environment</p>
+                          <p className="text-sm text-gray-600 italic">"{environment}"</p>
+                        </div>
+                      )}
+                      <div className="pt-4 border-t border-gray-100">
+                        <p className="text-[10px] text-gray-400 leading-tight">
+                          Disclaimer: This AI diagnosis is for informational purposes. Consult with a local agricultural officer for critical decisions.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                    <Button variant="outline" className="flex-1" onClick={() => window.print()}>
+                      <FileText size={18} className="mr-2" />
+                      Print Report
+                    </Button>
+                    <Button className="flex-1" onClick={() => { setImage(null); setResult(null); setSymptoms(''); setEnvironment(''); }}>
+                      <Plus size={18} className="mr-2" />
+                      New Scan
+                    </Button>
+                  </div>
+                </div>
               </Card>
+
+              <section className="space-y-4">
+                <h4 className="font-bold text-gray-900">Related Guidance</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card className="p-4 flex items-center gap-4 hover:bg-gray-50 cursor-pointer transition-all">
+                    <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center">
+                      <Sprout size={24} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">Pest Management</p>
+                      <p className="text-xs text-gray-500">Organic solutions for common pests</p>
+                    </div>
+                  </Card>
+                  <Card className="p-4 flex items-center gap-4 hover:bg-gray-50 cursor-pointer transition-all">
+                    <div className="w-12 h-12 bg-green-50 text-green-500 rounded-xl flex items-center justify-center">
+                      <TrendingUp size={24} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">Soil Health</p>
+                      <p className="text-xs text-gray-500">Improving crop resilience</p>
+                    </div>
+                  </Card>
+                </div>
+              </section>
             </motion.div>
           )}
         </div>
@@ -814,6 +926,7 @@ const AdminPanel = () => {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (statusMessage) {
@@ -1125,7 +1238,7 @@ const AdminPanel = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase())).map((u, i) => (
+                  {users.filter(u => (u.name?.toLowerCase().includes(searchQuery.toLowerCase()) || u.email?.toLowerCase().includes(searchQuery.toLowerCase()))).map((u, i) => (
                     <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-all">
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
@@ -1278,7 +1391,7 @@ const AdminPanel = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {crops
                   .filter(c => 
-                    (c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.farmer_name.toLowerCase().includes(searchQuery.toLowerCase())) &&
+                    (c.name?.toLowerCase().includes(searchQuery.toLowerCase()) || c.farmer_name?.toLowerCase().includes(searchQuery.toLowerCase())) &&
                     (categoryFilter === '' || c.category === categoryFilter)
                   )
                   .map((c, i) => (
@@ -2024,35 +2137,87 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     navItems.splice(4, 0, { icon: ShieldCheck, label: 'Admin', path: '/admin' });
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative shadow-2xl">
-      <div className="flex-1 overflow-y-auto">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
-      </div>
+  const isDesktop = window.innerWidth >= 1024;
 
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/80 backdrop-blur-lg border-t border-gray-100 px-6 py-4 flex justify-between items-center z-50">
-        {navItems.map((item, i) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <Link key={i} to={item.path} className="flex flex-col items-center gap-1">
-              <div className={cn("p-2 rounded-xl transition-all", isActive ? "bg-[#39FF14] text-black shadow-[0_0_10px_rgba(57,255,20,0.4)]" : "text-gray-400 hover:text-gray-600")}>
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row w-full relative">
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex w-64 bg-black text-white flex-col sticky top-0 h-screen p-6 shrink-0">
+        <div className="flex items-center gap-3 mb-10">
+          <div className="w-10 h-10 bg-[#39FF14] rounded-xl flex items-center justify-center">
+            <Sprout className="text-black" />
+          </div>
+          <h2 className="font-bold text-xl">SmartFarm</h2>
+        </div>
+        
+        <nav className="flex-1 space-y-2">
+          {navItems.map((item, i) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link 
+                key={i} 
+                to={item.path} 
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                  isActive ? "bg-[#39FF14] text-black shadow-[0_0_15px_rgba(57,255,20,0.4)]" : "text-gray-400 hover:text-white hover:bg-white/10"
+                )}
+              >
                 <item.icon size={20} />
-              </div>
-              <span className={cn("text-[10px] font-bold uppercase tracking-tighter", isActive ? "text-black" : "text-gray-400")}>{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="mt-auto pt-6 border-t border-white/10">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#39FF14]">
+              <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} className="w-full h-full" />
+            </div>
+            <div className="overflow-hidden">
+              <p className="font-bold text-sm truncate">{user?.name}</p>
+              <p className="text-[10px] text-gray-500 truncate">{user?.email}</p>
+            </div>
+          </div>
+          <button onClick={() => {}} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all font-bold text-sm">
+            <LogOut size={18} />
+            Sign Out
+          </button>
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 overflow-y-auto">
+          <div className="w-full max-w-5xl mx-auto">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={location.pathname}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Mobile Nav - Bottom */}
+        <nav className="lg:hidden fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-lg border-t border-gray-100 px-6 py-4 flex justify-between items-center z-50">
+          {navItems.map((item, i) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link key={i} to={item.path} className="flex flex-col items-center gap-1">
+                <div className={cn("p-2 rounded-xl transition-all", isActive ? "bg-[#39FF14] text-black shadow-[0_0_10px_rgba(57,255,20,0.4)]" : "text-gray-400 hover:text-gray-600")}>
+                  <item.icon size={20} />
+                </div>
+                <span className={cn("text-[10px] font-bold uppercase tracking-tighter", isActive ? "text-black" : "text-gray-400")}>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
     </div>
   );
 };
@@ -2112,6 +2277,204 @@ const ProtectedRoute = ({ children, adminOnly = false }: { children: React.React
   return <MainLayout>{children}</MainLayout>;
 };
 
+const Landing = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      navigate(user.role === 'admin' ? '/admin' : '/dashboard');
+    }
+  }, [user, navigate]);
+
+  return (
+    <div className="min-h-screen bg-white overflow-hidden">
+      {/* Hero Section */}
+      <header className="relative p-6 lg:p-12 flex flex-col lg:flex-row items-center justify-between gap-12 max-w-7xl mx-auto">
+        <div className="lg:w-1/2 space-y-8 text-center lg:text-left z-10">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#39FF14]/10 text-[#39FF14] rounded-full text-sm font-bold uppercase tracking-widest">
+            <Sprout size={16} />
+            Kenya's #1 Agri-Tech Platform
+          </div>
+          <h1 className="text-5xl lg:text-7xl font-black text-gray-900 leading-tight">
+            Empowering <span className="text-[#39FF14]">Kenyan Farmers</span> with AI
+          </h1>
+          <p className="text-xl text-gray-600 max-w-xl mx-auto lg:mx-0">
+            Detect crop diseases instantly, access real-time market prices, and connect with buyers across the country.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+            <Button onClick={() => navigate('/register')} className="py-5 px-10 text-lg">Get Started for Free</Button>
+            <Button onClick={() => navigate('/login')} variant="secondary" className="py-5 px-10 text-lg">Sign In</Button>
+          </div>
+          <div className="flex items-center justify-center lg:justify-start gap-8 pt-8">
+            <div>
+              <p className="text-3xl font-black">50k+</p>
+              <p className="text-sm text-gray-500">Active Farmers</p>
+            </div>
+            <div className="w-px h-10 bg-gray-200"></div>
+            <div>
+              <p className="text-3xl font-black">47</p>
+              <p className="text-sm text-gray-500">Counties Covered</p>
+            </div>
+          </div>
+        </div>
+        <div className="lg:w-1/2 relative">
+          <div className="absolute -inset-4 bg-[#39FF14]/20 blur-3xl rounded-full animate-pulse"></div>
+          <img 
+            src="https://picsum.photos/seed/kenya-farm/800/800" 
+            alt="Kenyan Farming" 
+            className="relative rounded-3xl shadow-2xl border-8 border-white w-full object-cover aspect-square"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      </header>
+
+      {/* Features */}
+      <section className="py-24 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-black mb-4">Everything You Need to Succeed</h2>
+            <p className="text-gray-500">Powerful tools designed specifically for the Kenyan agricultural landscape.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              { icon: Camera, title: "AI Disease Detection", desc: "Scan crops with your phone to identify pests and diseases instantly using Gemini AI." },
+              { icon: TrendingUp, title: "Market Insights", desc: "Stay ahead with real-time price tracking for all major crops across Kenyan markets." },
+              { icon: ShoppingBag, title: "Direct Marketplace", desc: "Sell your produce directly to buyers, cutting out middle-men and increasing profits." }
+            ].map((f, i) => (
+              <Card key={i} className="p-8 hover:shadow-xl transition-all border-none group">
+                <div className="w-16 h-16 bg-[#39FF14]/10 text-[#39FF14] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <f.icon size={32} />
+                </div>
+                <h3 className="text-xl font-bold mb-3">{f.title}</h3>
+                <p className="text-gray-600 leading-relaxed">{f.desc}</p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+const ListCrop = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [formCategory, setFormCategory] = useState('Grains');
+  const [formImage, setFormImage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setFormImage(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="p-6 pb-24">
+      {statusMessage && (
+        <div className={cn(
+          "fixed top-4 right-4 z-[100] p-4 rounded-2xl shadow-2xl animate-in slide-in-from-top-4 duration-300 flex items-center gap-3",
+          statusMessage.type === 'success' ? "bg-black text-[#39FF14] border border-[#39FF14]/20" : "bg-red-500 text-white"
+        )}>
+          {statusMessage.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+          <p className="font-bold text-sm">{statusMessage.text}</p>
+        </div>
+      )}
+
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={() => navigate(-1)} className="p-2 rounded-xl bg-gray-100"><X size={20} /></button>
+        <h1 className="text-2xl font-bold">List New Produce</h1>
+      </div>
+
+      <Card className="p-8">
+        <form className="space-y-6" onSubmit={async (e) => {
+          e.preventDefault();
+          setLoading(true);
+          const target = e.target as HTMLFormElement;
+          const formData = new FormData(target);
+          const data = {
+            name: String(formData.get('name')),
+            category: String(formData.get('category')),
+            price: String(formData.get('price')),
+            unit: String(formData.get('unit')),
+            description: String(formData.get('description')),
+            image_url: formImage || String(formData.get('image_url')),
+            county: String(formData.get('county'))
+          };
+          try {
+            await axios.post('/api/crops', data);
+            target.reset();
+            setFormImage('');
+            setStatusMessage({ type: 'success', text: 'Produce listed successfully! Waiting for admin approval.' });
+            setTimeout(() => navigate('/dashboard'), 2000);
+          } catch (err) {
+            setStatusMessage({ type: 'error', text: 'Failed to list produce' });
+          } finally {
+            setLoading(false);
+          }
+        }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">Produce Name</label>
+              <Input name="name" placeholder={formCategory === 'Livestock' ? "Animal Name (e.g. Cow, Goat)" : "Produce Name (e.g. Maize, Tomatoes)"} required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">Category</label>
+              <select 
+                name="category" 
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#39FF14] bg-white"
+                value={formCategory}
+                onChange={(e) => setFormCategory(e.target.value)}
+              >
+                {['Grains', 'Vegetables', 'Fruits', 'Tubers', 'Legumes', 'Livestock'].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">Price (KES)</label>
+              <Input name="price" type="number" placeholder="Price in KES" required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">Unit / Age</label>
+              <Input name="unit" placeholder={formCategory === 'Livestock' ? "Age (e.g. 2 years)" : "Unit (e.g. 90kg Bag, kg)"} required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">County</label>
+              <Input name="county" placeholder="County (e.g. Nakuru)" required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">Photo</label>
+              <div className="flex gap-4">
+                <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 rounded-xl cursor-pointer hover:bg-gray-200 transition-all">
+                  <Camera size={20} />
+                  <span className="text-sm font-bold">Upload Photo</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </label>
+                {formImage && (
+                  <div className="w-12 h-12 rounded-xl overflow-hidden border border-gray-200">
+                    <img src={formImage} className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-700">Description</label>
+            <textarea name="description" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#39FF14]" placeholder="Tell buyers more about your produce..." rows={4} required />
+          </div>
+          <Button type="submit" className="w-full py-4 text-lg" disabled={loading}>
+            {loading ? 'Processing...' : 'List Produce for Sale'}
+          </Button>
+        </form>
+      </Card>
+    </div>
+  );
+};
+
 // --- APP ---
 
 export default function App() {
@@ -2128,7 +2491,9 @@ export default function App() {
           <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPanel /></ProtectedRoute>} />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
+          <Route path="/list-crop" element={<ProtectedRoute><ListCrop /></ProtectedRoute>} />
+          <Route path="/landing" element={<Landing />} />
+          <Route path="/" element={<Navigate to="/landing" />} />
         </Routes>
       </Router>
     </AuthProvider>

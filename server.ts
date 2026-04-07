@@ -337,10 +337,18 @@ app.get("/api/counties", async (req, res) => {
 });
 
 // Crops Marketplace
-app.get("/api/crops", async (req, res) => {
-  const { search, county, category } = req.query;
-  let query = "SELECT c.*, u.name as farmer_name FROM crops c JOIN users u ON c.farmer_id = u.id WHERE c.status = 'approved'";
+app.get("/api/crops", authenticateToken, async (req: any, res: any) => {
+  const { search, county, category, farmer_id } = req.query;
+  const isAdmin = req.user.role === 'admin';
+  const isFarmerSelf = farmer_id && Number(farmer_id) === req.user.id;
+
+  let query = "SELECT c.*, u.name as farmer_name FROM crops c JOIN users u ON c.farmer_id = u.id WHERE 1=1";
   const params: any[] = [];
+
+  // If not admin and not requesting own crops, only show approved
+  if (!isAdmin && !isFarmerSelf) {
+    query += " AND c.status = 'approved'";
+  }
 
   if (search) {
     params.push(`%${search}%`);
@@ -354,6 +362,12 @@ app.get("/api/crops", async (req, res) => {
     params.push(category);
     query += ` AND c.category = $${params.length}`;
   }
+  if (farmer_id) {
+    params.push(farmer_id);
+    query += ` AND c.farmer_id = $${params.length}`;
+  }
+
+  query += " ORDER BY c.created_at DESC";
 
   try {
     const result = await pool.query(query, params);
