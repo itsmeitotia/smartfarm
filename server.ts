@@ -310,7 +310,22 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET);
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, location: user.location } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, location: user.location, profile_image: user.profile_image } });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Profile Update
+app.post("/api/profile/update", authenticateToken, async (req: any, res) => {
+  const { name, location, profile_image } = req.body;
+  const userId = req.user.id;
+  try {
+    const result = await pool.query(
+      "UPDATE users SET name = COALESCE($1, name), location = COALESCE($2, location), profile_image = COALESCE($3, profile_image) WHERE id = $4 RETURNING id, name, email, role, location, profile_image",
+      [name, location, profile_image, userId]
+    );
+    res.json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

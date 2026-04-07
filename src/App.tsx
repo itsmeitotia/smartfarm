@@ -41,7 +41,8 @@ import {
   ArrowDownRight,
   Clock,
   MapPin,
-  Bug
+  Bug,
+  Mail
 } from 'lucide-react';
 import {
   LineChart,
@@ -69,6 +70,7 @@ interface User {
   email: string;
   role: 'admin' | 'farmer' | 'buyer';
   location: string;
+  profile_image?: string;
 }
 
 interface AuthContextType {
@@ -326,12 +328,24 @@ const Dashboard = () => {
   const [prices, setPrices] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
+  const [forecast, setForecast] = useState<any[]>([]);
 
   useEffect(() => {
     axios.get('/api/market-prices').then(res => setPrices(res.data.slice(0, 4)));
     axios.get('/api/alerts').then(res => setAlerts(res.data.slice(0, 3)));
     const cropsUrl = user?.role === 'farmer' ? `/api/crops?farmer_id=${user.id}` : '/api/crops';
     axios.get(cropsUrl).then(res => setCrops(res.data));
+
+    // Mock 5-day forecast
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const today = new Date().getDay();
+    const mockForecast = Array(5).fill(0).map((_, i) => ({
+      day: days[(today + i) % 7],
+      temp: 22 + Math.floor(Math.random() * 5),
+      condition: ['Sunny', 'Cloudy', 'Rainy'][Math.floor(Math.random() * 3)],
+      icon: ['☀️', '☁️', '🌧️'][Math.floor(Math.random() * 3)]
+    }));
+    setForecast(mockForecast);
   }, [user]);
 
   return (
@@ -343,8 +357,12 @@ const Dashboard = () => {
             <p className="text-gray-500">{user?.location}, Kenya</p>
           </div>
           <div className="relative">
-            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-              <Bell size={24} className="text-gray-600" />
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden border-2 border-[#39FF14]">
+              {user?.profile_image ? (
+                <img src={user.profile_image} className="w-full h-full object-cover" />
+              ) : (
+                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} className="w-full h-full" />
+              )}
             </div>
             <span className="absolute top-0 right-0 w-3 h-3 bg-[#39FF14] border-2 border-white rounded-full"></span>
           </div>
@@ -353,14 +371,28 @@ const Dashboard = () => {
 
       <main className="p-6 space-y-8">
         {/* Weather Widget */}
-        <section className="bg-gradient-to-br from-[#39FF14] to-[#32e612] p-6 rounded-3xl text-black shadow-lg">
-          <div className="flex justify-between items-center">
+        <section className="bg-black text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#39FF14]/20 blur-3xl rounded-full -mr-16 -mt-16"></div>
+          <div className="flex justify-between items-center mb-8 relative z-10">
             <div>
-              <p className="text-sm font-medium opacity-80">Current Weather</p>
-              <h2 className="text-4xl font-bold">24°C</h2>
-              <p className="font-medium">Sunny Day in {user?.location}</p>
+              <p className="text-xs font-bold text-[#39FF14] uppercase tracking-widest mb-1">Weather Forecast</p>
+              <h2 className="text-3xl font-black">{forecast[0]?.temp}°C</h2>
+              <p className="text-gray-400 text-sm">{forecast[0]?.condition} in {user?.location}</p>
             </div>
-            <div className="text-6xl">☀️</div>
+            <div className="text-5xl">{forecast[0]?.icon}</div>
+          </div>
+          
+          <div className="grid grid-cols-5 gap-2 relative z-10">
+            {forecast.map((f, i) => (
+              <div key={i} className={cn(
+                "flex flex-col items-center p-3 rounded-2xl transition-all",
+                i === 0 ? "bg-[#39FF14] text-black" : "bg-white/5 hover:bg-white/10"
+              )}>
+                <span className="text-[10px] font-bold uppercase mb-2">{f.day}</span>
+                <span className="text-lg mb-1">{f.icon}</span>
+                <span className="text-xs font-black">{f.temp}°</span>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -2075,44 +2107,138 @@ const AdminPanel = () => {
 };
 
 const Profile = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, login } = useAuth();
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [profileImage, setProfileImage] = useState(user?.profile_image || '');
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const form = e.target as HTMLFormElement;
+    const data = {
+      name: (form.elements.namedItem('name') as HTMLInputElement).value,
+      location: (form.elements.namedItem('location') as HTMLInputElement).value,
+      profile_image: profileImage
+    };
+
+    try {
+      const res = await axios.post('/api/profile/update', data);
+      const token = localStorage.getItem('token');
+      if (token) login(token, res.data);
+      setIsEditing(false);
+      alert('Profile updated successfully!');
+    } catch (err) {
+      alert('Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setProfileImage(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
-    <div className="p-6 pb-24">
-      <h1 className="text-2xl font-bold mb-8">My Profile</h1>
-      <div className="flex flex-col items-center mb-8">
-        <div className="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center mb-4 border-4 border-[#39FF14] p-1">
-          <div className="w-full h-full bg-gray-200 rounded-full overflow-hidden">
-            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} className="w-full h-full" />
-          </div>
-        </div>
-        <h2 className="text-xl font-bold">{user?.name}</h2>
-        <p className="text-gray-500">{user?.email}</p>
-        <span className="bg-[#39FF14]/10 text-[#39FF14] px-3 py-1 rounded-full text-xs font-bold mt-2 uppercase tracking-widest">{user?.role}</span>
+    <div className="p-6 pb-24 max-w-2xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-2xl font-bold">My Profile</h1>
+        <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
+          {isEditing ? 'Cancel' : 'Edit Profile'}
+        </Button>
       </div>
 
-      <div className="space-y-4">
-        <Card className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400"><User size={20} /></div>
-            <div>
-              <p className="text-xs text-gray-400 font-bold uppercase">Location</p>
-              <p className="font-medium">{user?.location}</p>
+      <div className="flex flex-col items-center mb-12">
+        <div className="relative group">
+          <div className="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center mb-4 border-4 border-[#39FF14] p-1 overflow-hidden">
+            <div className="w-full h-full bg-gray-200 rounded-full overflow-hidden">
+              {profileImage ? (
+                <img src={profileImage} className="w-full h-full object-cover" />
+              ) : (
+                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} className="w-full h-full" />
+              )}
             </div>
           </div>
-          <ChevronRight size={20} className="text-gray-300" />
-        </Card>
-        <Card className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400"><Calendar size={20} /></div>
-            <div>
-              <p className="text-xs text-gray-400 font-bold uppercase">Order History</p>
-              <p className="font-medium">12 Completed Orders</p>
+          {isEditing && (
+            <label className="absolute bottom-4 right-0 bg-black text-white p-2 rounded-full cursor-pointer shadow-lg hover:scale-110 transition-transform">
+              <Camera size={18} />
+              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+            </label>
+          )}
+        </div>
+        <h2 className="text-2xl font-black mt-2">{user?.name}</h2>
+        <p className="text-gray-500 font-medium">{user?.email}</p>
+        <div className="flex gap-2 mt-4">
+          <span className="bg-[#39FF14]/10 text-[#39FF14] px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-[#39FF14]/20">{user?.role}</span>
+          <span className="bg-gray-100 text-gray-500 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-gray-200">Active</span>
+        </div>
+      </div>
+
+      {isEditing ? (
+        <Card className="p-8">
+          <form className="space-y-6" onSubmit={handleUpdateProfile}>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Full Name</label>
+              <Input name="name" defaultValue={user?.name} required />
             </div>
-          </div>
-          <ChevronRight size={20} className="text-gray-300" />
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Location (County)</label>
+              <Input name="location" defaultValue={user?.location} required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Profile Image URL (Optional)</label>
+              <Input 
+                placeholder="https://..." 
+                value={profileImage} 
+                onChange={(e) => setProfileImage(e.target.value)} 
+              />
+            </div>
+            <Button type="submit" className="w-full py-4 text-lg" disabled={loading}>
+              {loading ? 'Saving Changes...' : 'Save Profile'}
+            </Button>
+          </form>
         </Card>
-        <Button variant="danger" className="w-full mt-8 py-4 flex items-center justify-center gap-2" onClick={logout}>
-          <LogOut size={20} /> Sign Out
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="p-6 flex items-center gap-4">
+            <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-[#39FF14]"><MapPin size={24} /></div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">Location</p>
+              <p className="font-bold text-gray-900">{user?.location}</p>
+            </div>
+          </Card>
+          <Card className="p-6 flex items-center gap-4">
+            <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-[#39FF14]"><ShieldCheck size={24} /></div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">Account Type</p>
+              <p className="font-bold text-gray-900 capitalize">{user?.role}</p>
+            </div>
+          </Card>
+          <Card className="p-6 flex items-center gap-4">
+            <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-[#39FF14]"><Calendar size={24} /></div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">Member Since</p>
+              <p className="font-bold text-gray-900">April 2026</p>
+            </div>
+          </Card>
+          <Card className="p-6 flex items-center gap-4">
+            <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-[#39FF14]"><Mail size={24} /></div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">Verified Email</p>
+              <p className="font-bold text-gray-900 truncate">{user?.email}</p>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <div className="mt-12 space-y-4">
+        <Button variant="danger" className="w-full py-4 flex items-center justify-center gap-2" onClick={logout}>
+          <LogOut size={20} /> Sign Out Account
         </Button>
       </div>
     </div>
