@@ -419,7 +419,7 @@ const Dashboard = () => {
                 {crops.filter(c => c.farmer_id === user.id).map((c, i) => (
                   <Card key={i} className="p-4 flex items-center gap-4">
                     <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 shrink-0">
-                      <img src={c.image_url || `https://picsum.photos/seed/${c.name}/200/200`} className="w-full h-full object-cover" />
+                      <img src={c.image_url || `farm.jpeg`} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-bold text-gray-900 truncate">{c.name}</h4>
@@ -566,7 +566,7 @@ const Marketplace = () => {
           crops.map((c, i) => (
             <Card key={i} className="overflow-hidden p-0 flex flex-col">
               <div className="h-48 bg-gray-200 relative">
-                <img src={c.image_url || `https://picsum.photos/seed/${c.name}/800/600`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={c.image_url || `farm.jpeg`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black">
                   {c.county}
                 </div>
@@ -833,7 +833,7 @@ const Guidance = () => {
           <Card key={i} className="p-0 overflow-hidden">
             <div className="flex">
               <div className="w-32 h-32 bg-gray-100 shrink-0">
-                <img src={g.image_url || `https://picsum.photos/seed/${g.title}/300/300`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={g.image_url || `farm.jpeg`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
               <div className="p-4 flex flex-col justify-center">
                 <h3 className="font-bold text-gray-900 mb-1">{g.title}</h3>
@@ -1441,7 +1441,7 @@ const AdminPanel = () => {
                       <Trash2 size={14} />
                     </button>
                     <div className="h-48 bg-gray-100 relative">
-                    <img src={c.image_url || `https://picsum.photos/seed/${c.name}/400/300`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img src={c.image_url || `farm.jpeg`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     <div className="absolute top-4 left-4 bg-black/80 text-[#39FF14] px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest">
                       {c.category || 'Uncategorized'}
                     </div>
