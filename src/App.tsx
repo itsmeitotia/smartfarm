@@ -2447,7 +2447,7 @@ const Landing = () => {
         <div className="lg:w-1/2 relative">
           <div className="absolute -inset-4 bg-[#39FF14]/20 blur-3xl rounded-full animate-pulse"></div>
           <img 
-            src="https://picsum.photos/seed/kenya-farm/800/800" 
+            src="farm.jpeg" 
             alt="Kenyan Farming" 
             className="relative rounded-3xl shadow-2xl border-8 border-white w-full object-cover aspect-square"
             referrerPolicy="no-referrer"
