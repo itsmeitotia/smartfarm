@@ -90,6 +90,33 @@ const useAuth = () => {
   return context;
 };
 
+// --- AXIOS INTERCEPTOR ---
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 503 && error.response?.data?.maintenance) {
+      window.location.href = '/maintenance';
+    }
+    return Promise.reject(error);
+  }
+);
+
+const MaintenancePage = () => (
+  <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center">
+    <div className="w-24 h-24 bg-[#39FF14]/10 rounded-full flex items-center justify-center mb-8 animate-pulse">
+      <AlertTriangle size={48} className="text-[#39FF14]" />
+    </div>
+    <h1 className="text-4xl font-black text-white mb-4">Under Maintenance</h1>
+    <p className="text-gray-400 max-w-md mb-8">
+      We're currently performing some scheduled maintenance to improve your experience. 
+      SmartFarm Kenya will be back online shortly.
+    </p>
+    <div className="flex gap-4">
+      <div className="px-4 py-2 bg-white/5 rounded-xl text-xs font-bold text-gray-500 uppercase tracking-widest">Estimated Time: 2 Hours</div>
+    </div>
+  </div>
+);
+
 // --- COMPONENTS ---
 
 const Button = ({ className, variant = 'primary', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' }) => {
@@ -329,12 +356,18 @@ const Dashboard = () => {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
   const [forecast, setForecast] = useState<any[]>([]);
+  const [farmerOrders, setFarmerOrders] = useState<any[]>([]);
+  const [messageModal, setMessageModal] = useState<{ isOpen: boolean, userId: number | null, userName: string }>({ isOpen: false, userId: null, userName: '' });
 
   useEffect(() => {
     axios.get('/api/market-prices').then(res => setPrices(res.data.slice(0, 4)));
     axios.get('/api/alerts').then(res => setAlerts(res.data.slice(0, 3)));
     const cropsUrl = user?.role === 'farmer' ? `/api/crops?farmer_id=${user.id}` : '/api/crops';
     axios.get(cropsUrl).then(res => setCrops(res.data));
+
+    if (user?.role === 'farmer') {
+      axios.get('/api/farmer/orders').then(res => setFarmerOrders(res.data));
+    }
 
     // Mock 5-day forecast
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -347,6 +380,19 @@ const Dashboard = () => {
     }));
     setForecast(mockForecast);
   }, [user]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const message = (form.elements.namedItem('message') as HTMLTextAreaElement).value;
+    try {
+      await axios.post('/api/messages', { message, receiver_id: messageModal.userId });
+      alert('Message sent successfully!');
+      setMessageModal({ isOpen: false, userId: null, userName: '' });
+    } catch (err) {
+      alert('Failed to send message');
+    }
+  };
 
   return (
     <div className="pb-24">
@@ -410,41 +456,118 @@ const Dashboard = () => {
               <Sprout className="absolute -right-4 -bottom-4 text-[#39FF14]/10" size={120} />
             </Card>
 
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold">My Listings</h3>
-                <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Status Tracking</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {crops.filter(c => c.farmer_id === user.id).map((c, i) => (
-                  <Card key={i} className="p-4 flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 shrink-0">
-                      <img src={c.image_url || `farm.jpeg`} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-gray-900 truncate">{c.name}</h4>
-                      <p className="text-xs text-gray-500">KES {c.price} / {c.unit}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={cn(
-                          "text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter",
-                          c.status === 'approved' ? "bg-green-100 text-green-600" : 
-                          c.status === 'rejected' ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-600"
-                        )}>
-                          {c.status}
-                        </span>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold">My Listings</h3>
+                  <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Status Tracking</span>
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                  {crops.filter(c => c.farmer_id === user.id).map((c, i) => (
+                    <Card key={i} className="p-4 flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+                        <img src={c.image_url || `https://picsum.photos/seed/${c.name}/200/200`} className="w-full h-full object-cover" />
                       </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-gray-900 truncate">{c.name}</h4>
+                        <p className="text-xs text-gray-500">KES {c.price} / {c.unit}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={cn(
+                            "text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter",
+                            c.status === 'approved' ? "bg-green-100 text-green-600" : 
+                            c.status === 'rejected' ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-600"
+                          )}>
+                            {c.status}
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                  {crops.filter(c => c.farmer_id === user.id).length === 0 && (
+                    <div className="p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                      <p className="text-sm text-gray-400">You haven't listed any crops yet.</p>
                     </div>
-                  </Card>
-                ))}
-                {crops.filter(c => c.farmer_id === user.id).length === 0 && (
-                  <div className="col-span-full p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                    <p className="text-sm text-gray-400">You haven't listed any crops yet.</p>
-                  </div>
-                )}
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold">Recent Orders</h3>
+                  <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Customer Communication</span>
+                </div>
+                <div className="space-y-4">
+                  {farmerOrders.map((order, i) => (
+                    <Card key={i} className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-[#39FF14]/10 rounded-full flex items-center justify-center font-bold text-[#39FF14]">
+                            {order.buyer_name[0]}
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm">{order.buyer_name}</p>
+                            <p className="text-[10px] text-gray-400 uppercase tracking-widest">{order.crop_name}</p>
+                          </div>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          className="p-2 h-auto rounded-full"
+                          onClick={() => setMessageModal({ isOpen: true, userId: order.buyer_id, userName: order.buyer_name })}
+                        >
+                          <MessageSquare size={18} className="text-[#39FF14]" />
+                        </Button>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-500">{order.quantity} {order.unit || 'kg'} ordered</span>
+                        <span className="font-black">KSh {order.total_price}</span>
+                      </div>
+                    </Card>
+                  ))}
+                  {farmerOrders.length === 0 && (
+                    <div className="p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                      <p className="text-sm text-gray-400">No orders received yet.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>
         )}
+
+        {/* Message Modal */}
+        <AnimatePresence>
+          {messageModal.isOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="w-full max-w-md"
+              >
+                <Card className="p-8">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-xl">Message {messageModal.userName}</h3>
+                    <button onClick={() => setMessageModal({ isOpen: false, userId: null, userName: '' })} className="text-gray-400 hover:text-black">
+                      <X size={24} />
+                    </button>
+                  </div>
+                  <form onSubmit={handleSendMessage} className="space-y-4">
+                    <textarea 
+                      name="message" 
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#39FF14]" 
+                      placeholder="Type your message here..." 
+                      rows={5}
+                      required
+                    />
+                    <Button type="submit" className="w-full py-4 flex items-center justify-center gap-2">
+                      <Send size={18} /> Send Message
+                    </Button>
+                  </form>
+                </Card>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Crop Health Check */}
         <section>
@@ -566,7 +689,7 @@ const Marketplace = () => {
           crops.map((c, i) => (
             <Card key={i} className="overflow-hidden p-0 flex flex-col">
               <div className="h-48 bg-gray-200 relative">
-                <img src={c.image_url || `farm.jpeg`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={c.image_url || `https://picsum.photos/seed/${c.name}/800/600`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black">
                   {c.county}
                 </div>
@@ -833,7 +956,7 @@ const Guidance = () => {
           <Card key={i} className="p-0 overflow-hidden">
             <div className="flex">
               <div className="w-32 h-32 bg-gray-100 shrink-0">
-                <img src={g.image_url || `farm.jpeg`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={g.image_url || `https://picsum.photos/seed/${g.title}/300/300`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
               <div className="p-4 flex flex-col justify-center">
                 <h3 className="font-bold text-gray-900 mb-1">{g.title}</h3>
@@ -931,7 +1054,7 @@ const Messages = () => {
 };
 
 const AdminPanel = () => {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
@@ -947,6 +1070,8 @@ const AdminPanel = () => {
   const [tab, setTab] = useState('dashboard');
   const [replyText, setReplyText] = useState<{ [key: number]: string }>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [settings, setSettings] = useState<any>({});
+  const [messageModal, setMessageModal] = useState<{ isOpen: boolean, userId: number | null, userName: string }>({ isOpen: false, userId: null, userName: '' });
 
   const [categoryFilter, setCategoryFilter] = useState('');
   const categories = ['Grains', 'Vegetables', 'Fruits', 'Tubers', 'Legumes', 'Livestock'];
@@ -967,24 +1092,70 @@ const AdminPanel = () => {
     }
   }, [statusMessage]);
 
-  const fetchData = () => {
-    axios.get('/api/admin/stats').then(res => setStats(res.data));
-    axios.get('/api/admin/users').then(res => setUsers(res.data));
-    axios.get('/api/admin/crops').then(res => setCrops(res.data));
-    axios.get('/api/admin/orders').then(res => setOrders(res.data));
-    axios.get('/api/admin/messages').then(res => setMessages(res.data));
-    axios.get('/api/admin/logs').then(res => setLogs(res.data));
-    axios.get('/api/admin/payments').then(res => setPayments(res.data));
-    axios.get('/api/admin/ai-logs').then(res => setAiLogs(res.data));
-    axios.get('/api/alerts').then(res => setAlertsList(res.data));
-    axios.get('/api/events').then(res => setEventsList(res.data));
-    axios.get('/api/guidance').then(res => setGuidanceList(res.data));
-    axios.get('/api/market-prices').then(res => setMarketPricesList(res.data));
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [s, u, c, o, m, l, p, ai, al, e, g, mp, set] = await Promise.all([
+        axios.get('/api/admin/stats'),
+        axios.get('/api/admin/users'),
+        axios.get('/api/admin/crops'),
+        axios.get('/api/admin/orders'),
+        axios.get('/api/admin/messages'),
+        axios.get('/api/admin/logs'),
+        axios.get('/api/admin/payments'),
+        axios.get('/api/admin/ai-logs'),
+        axios.get('/api/alerts'),
+        axios.get('/api/events'),
+        axios.get('/api/guidance'),
+        axios.get('/api/market-prices'),
+        axios.get('/api/admin/settings')
+      ]);
+      setStats(s.data);
+      setUsers(u.data);
+      setCrops(c.data);
+      setOrders(o.data);
+      setMessages(m.data);
+      setLogs(l.data);
+      setPayments(p.data);
+      setAiLogs(ai.data);
+      setAlertsList(al.data);
+      setEventsList(e.data);
+      setGuidanceList(g.data);
+      setMarketPricesList(mp.data);
+      setSettings(set.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  const updateSetting = async (key: string, value: any) => {
+    try {
+      await axios.post('/api/admin/settings', { key, value });
+      setSettings({ ...settings, [key]: value });
+      alert('Setting updated successfully!');
+    } catch (err) {
+      alert('Failed to update setting');
+    }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const message = (form.elements.namedItem('message') as HTMLTextAreaElement).value;
+    try {
+      await axios.post('/api/messages', { message, receiver_id: messageModal.userId });
+      alert('Message sent successfully!');
+      setMessageModal({ isOpen: false, userId: null, userName: '' });
+    } catch (err) {
+      alert('Failed to send message');
+    }
+  };
 
   const handleReply = async (id: number) => {
     if (!replyText[id]) return;
@@ -1294,6 +1465,13 @@ const AdminPanel = () => {
                       </td>
                       <td className="py-4 px-4 text-right">
                         <div className="flex justify-end gap-2">
+                          <button 
+                            onClick={() => setMessageModal({ isOpen: true, userId: u.id, userName: u.name })}
+                            className="p-2 rounded-lg hover:bg-gray-100 transition-all text-[#39FF14]"
+                            title="Message User"
+                          >
+                            <MessageSquare size={18} />
+                          </button>
                           <button onClick={() => toggleSuspend(u.id, u.is_suspended)} className="p-2 rounded-lg hover:bg-gray-100 transition-all">
                             {u.is_suspended ? <Unlock size={18} className="text-green-500" /> : <Lock size={18} className="text-red-500" />}
                           </button>
@@ -2064,9 +2242,18 @@ const AdminPanel = () => {
                     <p className="font-bold">Maintenance Mode</p>
                     <p className="text-xs text-gray-500">Disable platform for users</p>
                   </div>
-                  <div className="w-12 h-6 bg-gray-200 rounded-full relative">
-                    <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                  </div>
+                  <button 
+                    onClick={() => updateSetting('maintenance_mode', !settings.maintenance_mode)}
+                    className={cn(
+                      "w-12 h-6 rounded-full relative transition-all",
+                      settings.maintenance_mode ? "bg-[#39FF14]" : "bg-gray-200"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                      settings.maintenance_mode ? "right-1" : "left-1"
+                    )}></div>
+                  </button>
                 </div>
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
                   <div>
@@ -2082,6 +2269,41 @@ const AdminPanel = () => {
             </Card>
           </div>
         )}
+
+        {/* Message Modal */}
+        <AnimatePresence>
+          {messageModal.isOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="w-full max-w-md"
+              >
+                <Card className="p-8">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-xl">Message {messageModal.userName}</h3>
+                    <button onClick={() => setMessageModal({ isOpen: false, userId: null, userName: '' })} className="text-gray-400 hover:text-black">
+                      <X size={24} />
+                    </button>
+                  </div>
+                  <form onSubmit={handleSendMessage} className="space-y-4">
+                    <textarea 
+                      name="message" 
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#39FF14]" 
+                      placeholder="Type your message here..." 
+                      rows={5}
+                      required
+                    />
+                    <Button type="submit" className="w-full py-4 flex items-center justify-center gap-2">
+                      <Send size={18} /> Send Message
+                    </Button>
+                  </form>
+                </Card>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Mobile Nav - Bottom */}
@@ -2610,6 +2832,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/maintenance" element={<MaintenancePage />} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
           <Route path="/detect" element={<ProtectedRoute><CropDetection /></ProtectedRoute>} />

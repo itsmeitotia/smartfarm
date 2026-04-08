@@ -139,8 +139,15 @@ async function initDB() {
           admin_correction TEXT,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS settings (
+          key VARCHAR(255) PRIMARY KEY,
+          value JSONB NOT NULL
+      );
     `;
     await client.query(schema);
+
+    // Seed default settings
+    await client.query("INSERT INTO settings (key, value) VALUES ('maintenance_mode', 'false') ON CONFLICT (key) DO NOTHING");
 
     // Ensure columns exist for existing tables
     await client.query("ALTER TABLE alerts ADD COLUMN IF NOT EXISTS image_url TEXT");
@@ -237,6 +244,21 @@ const isAdmin = (req: any, res: any, next: any) => {
   next();
 };
 
+// Middleware: Maintenance Mode
+const checkMaintenance = async (req: any, res: any, next: any) => {
+  try {
+    const result = await pool.query("SELECT value FROM settings WHERE key = 'maintenance_mode'");
+    const maintenanceMode = result.rows[0]?.value === true || result.rows[0]?.value === 'true';
+    
+    if (maintenanceMode && (!req.user || req.user.role !== 'admin')) {
+      return res.status(503).json({ error: "System is under maintenance. Please try again later.", maintenance: true });
+    }
+    next();
+  } catch (err) {
+    next();
+  }
+};
+
 // Helper: Log Admin Action
 const logAdminAction = async (adminId: number, actionType: string, targetType: string, targetId: number | null, details: any) => {
   try {
@@ -307,6 +329,13 @@ app.post("/api/auth/login", async (req, res) => {
     if (!validPassword) {
       console.log(`Login failed: Invalid password for ${email}`);
       return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Check maintenance mode before allowing login for non-admins
+    const maintenanceResult = await pool.query("SELECT value FROM settings WHERE key = 'maintenance_mode'");
+    const maintenanceMode = maintenanceResult.rows[0]?.value === true || maintenanceResult.rows[0]?.value === 'true';
+    if (maintenanceMode && user.role !== 'admin') {
+      return res.status(503).json({ error: "System is under maintenance. Please try again later.", maintenance: true });
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET);
@@ -413,7 +442,7 @@ app.post("/api/crops", authenticateToken, async (req, res) => {
 });
 
 // Alerts
-app.get("/api/alerts", authenticateToken, async (req, res) => {
+app.get("/api/alerts", authenticateToken, checkMaintenance, async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM alerts WHERE status = 'approved' OR user_id = $1 ORDER BY created_at DESC", [(req as any).user.id]);
     res.json(result.rows);
@@ -433,7 +462,7 @@ app.get("/api/events", async (req, res) => {
 });
 
 // Guidance
-app.get("/api/guidance", async (req, res) => {
+app.get("/api/guidance", authenticateToken, checkMaintenance, async (req, res) => {
   const { category } = req.query;
   try {
     let query = "SELECT * FROM guidance";
@@ -488,7 +517,7 @@ app.post("/api/detect-problem", authenticateToken, async (req, res) => {
 });
 
 // Orders
-app.get("/api/orders", authenticateToken, async (req, res) => {
+app.get("/api/orders", authenticateToken, checkMaintenance, async (req, res) => {
   const user = (req as any).user;
   try {
     const result = await pool.query(
@@ -501,7 +530,20 @@ app.get("/api/orders", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/orders", authenticateToken, async (req, res) => {
+// Farmer Orders (Orders for crops owned by the farmer)
+app.get("/api/farmer/orders", authenticateToken, checkMaintenance, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT o.*, c.name as crop_name, c.image_url as crop_image, u.name as buyer_name, u.phone as buyer_phone, u.id as buyer_id FROM orders o JOIN crops c ON o.crop_id = c.id JOIN users u ON o.buyer_id = u.id WHERE c.farmer_id = $1 ORDER BY o.created_at DESC",
+      [(req as any).user.id]
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/orders", authenticateToken, checkMaintenance, async (req, res) => {
   const { crop_id, quantity, total_price } = req.body;
   const user = (req as any).user;
   try {
@@ -516,10 +558,10 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
 });
 
 // Messages
-app.get("/api/messages", authenticateToken, async (req, res) => {
+app.get("/api/messages", authenticateToken, checkMaintenance, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT m.*, u.name as sender_name FROM messages m JOIN users u ON m.sender_id = u.id WHERE m.sender_id = $1 OR m.receiver_id = $1 ORDER BY m.created_at DESC",
+      "SELECT m.*, u.name as sender_name, r.name as receiver_name FROM messages m JOIN users u ON m.sender_id = u.id JOIN users r ON m.receiver_id = r.id WHERE m.sender_id = $1 OR m.receiver_id = $1 ORDER BY m.created_at DESC",
       [(req as any).user.id]
     );
     res.json(result.rows);
@@ -528,18 +570,50 @@ app.get("/api/messages", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/messages", authenticateToken, async (req, res) => {
-  const { message } = req.body;
+app.post("/api/messages", authenticateToken, checkMaintenance, async (req, res) => {
+  const { message, receiver_id } = req.body;
   try {
-    // Find an admin to receive the message
-    const adminResult = await pool.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
-    if (adminResult.rows.length === 0) return res.status(404).json({ error: "No admin found" });
+    let targetReceiverId = receiver_id;
+    
+    // If no receiver_id provided, default to an admin (original behavior)
+    if (!targetReceiverId) {
+      const adminResult = await pool.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+      if (adminResult.rows.length === 0) return res.status(404).json({ error: "No admin found" });
+      targetReceiverId = adminResult.rows[0].id;
+    }
     
     const result = await pool.query(
       "INSERT INTO messages (sender_id, receiver_id, message) VALUES ($1, $2, $3) RETURNING *",
-      [(req as any).user.id, adminResult.rows[0].id, message]
+      [(req as any).user.id, targetReceiverId, message]
     );
     res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Settings API
+app.get("/api/admin/settings", authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM settings");
+    const settings: any = {};
+    result.rows.forEach(row => {
+      settings[row.key] = row.value;
+    });
+    res.json(settings);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/settings", authenticateToken, isAdmin, async (req, res) => {
+  const { key, value } = req.body;
+  try {
+    await pool.query(
+      "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2",
+      [key, JSON.stringify(value)]
+    );
+    res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
